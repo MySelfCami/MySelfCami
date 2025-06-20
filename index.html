@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Planner Boho - Checklist Múltiplo e Emoji Picker</title>
+<style>
+  body {
+    font-family: 'Poppins', sans-serif;
+    background: #f9f5f1;
+    color: #4a4a3d;
+    margin: 2rem;
+  }
+  .checklist-list, .checklist-editor {
+    max-width: 600px;
+    margin: auto;
+    background: white;
+    border-radius: 14px;
+    padding: 1rem 2rem;
+    box-shadow: 0 6px 12px rgba(165,141,136,0.15);
+  }
+  .checklist-list h2, .checklist-editor h2 {
+    color: #6b705c;
+  }
+  .checklist-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 1px solid #d8cfc4;
+  }
+  .btn {
+    padding: 6px 12px;
+    background: #b5838d;
+    border: none;
+    border-radius: 20px;
+    color: white;
+    cursor: pointer;
+    margin-left: 6px;
+  }
+  .btn.red {
+    background: #e06666;
+  }
+  input[type=text] {
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 2px solid #d8cfc4;
+    font-size: 1rem;
+    width: 80%;
+  }
+  input[type=color] {
+    margin-left: 8px;
+    vertical-align: middle;
+    cursor: pointer;
+  }
+  .emoji-picker {
+    position: absolute;
+    background: white;
+    border: 1px solid #d8cfc4;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    max-width: 240px;
+    max-height: 150px;
+    overflow-y: scroll;
+    padding: 6px;
+    display: none;
+    z-index: 100;
+  }
+  .emoji-picker span {
+    cursor: pointer;
+    font-size: 1.3rem;
+    padding: 4px 6px;
+    display: inline-block;
+  }
+</style>
+</head>
+<body>
+
+<!-- Lista geral de checklists -->
+<div class="checklist-list" id="checklist-list">
+  <h2>📋 Meus Checklists</h2>
+  <div style="margin-bottom: 1rem;">
+    <input type="text" id="novo-nome-checklist" placeholder="Nome do novo checklist" />
+    <input type="color" id="nova-cor-checklist" value="#b5838d" title="Cor do checklist" />
+    <button class="btn" onclick="criarChecklist()">Criar Checklist</button>
+  </div>
+  <ul id="listas-checklists"></ul>
+</div>
+
+<!-- Editor de checklist aberto -->
+<div class="checklist-editor" id="checklist-editor" style="display:none; position: relative;">
+  <button class="btn red" onclick="fecharEditor()">← Voltar</button>
+  <h2 id="titulo-checklist"></h2>
+  <input type="text" id="input-item" placeholder="Adicionar tarefa (use emojis)" />
+  <button class="btn" onclick="addItem()">Adicionar</button>
+
+  <!-- Emoji picker -->
+  <div id="emoji-picker" class="emoji-picker"></div>
+
+  <ul id="itens-checklist"></ul>
+</div>
+
+<script>
+  let checklists = JSON.parse(localStorage.getItem('checklists') || '[]');
+  let checklistAtual = null;
+
+  // Emoji picker básico
+  const emojis = ['✅','🌿','✨','📅','📝','🌼','💡','🔥','🎯','🔔','💖','📌','🧘‍♀️','☕','🍃'];
+
+  const inputItem = document.getElementById('input-item');
+  const emojiPicker = document.getElementById('emoji-picker');
+
+  function mostrarEmojiPicker() {
+    emojiPicker.innerHTML = '';
+    emojis.forEach(e => {
+      const span = document.createElement('span');
+      span.textContent = e;
+      span.onclick = () => {
+        inserirEmojiNoInput(e);
+      };
+      emojiPicker.appendChild(span);
+    });
+    emojiPicker.style.display = 'block';
+    // posiciona abaixo do input
+    const rect = inputItem.getBoundingClientRect();
+    emojiPicker.style.top = (rect.bottom + window.scrollY) + 'px';
+    emojiPicker.style.left = (rect.left + window.scrollX) + 'px';
+  }
+
+  function esconderEmojiPicker() {
+    emojiPicker.style.display = 'none';
+  }
+
+  function inserirEmojiNoInput(emoji) {
+    const start = inputItem.selectionStart;
+    const end = inputItem.selectionEnd;
+    const text = inputItem.value;
+    inputItem.value = text.substring(0, start) + emoji + text.substring(end);
+    inputItem.focus();
+    inputItem.selectionStart = inputItem.selectionEnd = start + emoji.length;
+    esconderEmojiPicker();
+  }
+
+  inputItem.addEventListener('focus', mostrarEmojiPicker);
+  inputItem.addEventListener('blur', () => {
+    // esperar um pouco antes de esconder pra poder clicar no emoji
+    setTimeout(() => esconderEmojiPicker(), 200);
+  });
+
+  // Criar novo checklist
+  function criarChecklist() {
+    const nome = document.getElementById('novo-nome-checklist').value.trim();
+    const cor = document.getElementById('nova-cor-checklist').value;
+    if (!nome) {
+      alert('Digite o nome do checklist');
+      return;
+    }
+    const novo = {
+      id: Date.now(),
+      nome,
+      cor,
+      itens: []
+    };
+    checklists.push(novo);
+    salvarChecklists();
+    carregarListas();
+    document.getElementById('novo-nome-checklist').value = '';
+  }
+
+  // Salvar checklists no localStorage
+  function salvarChecklists() {
+    localStorage.setItem('checklists', JSON.stringify(checklists));
+  }
+
+  // Carregar lista geral de checklists
+  function carregarListas() {
+    const ul = document.getElementById('listas-checklists');
+    ul.innerHTML = '';
+    checklists.forEach(c => {
+      const li = document.createElement('li');
+      li.style.borderLeft = `8px solid ${c.cor}`;
+      li.style.padding = '8px';
+      li.style.marginBottom = '8px';
+      li.style.cursor = 'pointer';
+      li.textContent = c.nome;
+
+      li.onclick = () => abrirChecklist(c.id);
+
+      // Botão excluir
+      const btnExcluir = document.createElement('button');
+      btnExcluir.textContent = '✕';
+      btnExcluir.className = 'btn red';
+      btnExcluir.style.marginLeft = '12px';
+      btnExcluir.onclick = (e) => {
+        e.stopPropagation();
+        if(confirm(`Excluir checklist "${c.nome}"?`)) {
+          checklists = checklists.filter(item => item.id !== c.id);
+          salvarChecklists();
+          carregarListas();
+          if(checklistAtual === c.id) fecharEditor();
+        }
+      };
+
+      li.appendChild(btnExcluir);
+      ul.appendChild(li);
+    });
+  }
+
+  // Abrir checklist para editar itens
+  function abrirChecklist(id) {
+    checklistAtual = id;
+    const checklist = checklists.find(c => c.id === id);
+    if(!checklist) return;
+    document.getElementById('checklist-list').style.display = 'none';
+    const editor = document.getElementById('checklist-editor');
+    editor.style.display = 'block';
+    editor.style.borderLeft = `12px solid ${checklist.cor}`;
+    document.getElementById('titulo-checklist').textContent = checklist.nome;
+    carregarItens(checklist.itens);
+  }
+
+  // Fechar editor e voltar para lista geral
+  function fecharEditor() {
+    checklistAtual = null;
+    document.getElementById('checklist-editor').style.display = 'none';
+    document.getElementById('checklist-list').style.display = 'block';
+  }
+
+  // Carregar itens no editor
+  function carregarItens(itens) {
+    const ul = document.getElementById('itens-checklist');
+    ul.innerHTML = '';
+    itens.forEach((item, i) => {
+      const li = document.createElement('li');
+      li.className = 'checklist-item';
+      li.textContent = item;
+
+      const btnExcluir = document.createElement('button');
+      btnExcluir.textContent = '✕';
+      btnExcluir.className = 'btn red';
+      btnExcluir.onclick = () => {
+        const checklist = checklists.find(c => c.id === checklistAtual);
+        checklist.itens.splice(i, 1);
+        salvarChecklists();
+        carregarItens(checklist.itens);
+      };
+
+      li.appendChild(btnExcluir);
+      ul.appendChild(li);
+    });
+  }
+
+  // Adicionar item ao checklist atual
+  function addItem() {
+    const input = document.getElementById('input-item');
+    const texto = input.value.trim();
+    if(!texto) {
+      alert('Digite algo para adicionar!');
+      return;
+    }
+    const checklist = checklists.find(c => c.id === checklistAtual);
+    checklist.itens.push(texto);
+    salvarChecklists();
+    carregarItens(checklist.itens);
+    input.value = '';
+    input.focus();
+  }
+
+  // Inicialização
+  carregarListas();
+</script>
+
+</body>
+</html>
